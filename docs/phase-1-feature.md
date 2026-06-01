@@ -249,11 +249,12 @@ assertAuthorIsUser(summary, expectedUsername): void
   baseBranch, headBranch, url, body,
   changedFiles, additions, deletions,
   files: [{ filename, status, additions, deletions, changes }],
-  diffCharCount: number
+  diffCharCount: number;
+  diffText: string;
 }
 ```
 
-**Why:** One object carries everything Phase 2 needs without re-fetching from GitHub.
+**Why:** One object carries everything Phase 2 needs without re-fetching from GitHub (`diffText` added in Phase 2).
 
 ---
 
@@ -287,6 +288,85 @@ assertAuthorIsUser(summary, expectedUsername): void
 | 404 Not Found | Wrong repo slug or PR # | Check `owner/repo` and PR number on GitHub |
 | 403 Forbidden | Token lacks permission or repo not selected | Add repo to token; enable Pull requests Read |
 | Author mismatch | PR opened by someone else | Use your PR or `--allow-any-author` |
+
+---
+
+## Example test output (terminal)
+
+**Command:**
+
+```bash
+npm run review -- --repo vieronicka/PR-Review-Bot --pr 1 --dry-run
+```
+
+**Expected:** Exit code 0, summary printed, no AI call, no GitHub comment.
+
+**Sample output** (PR #1 on `vieronicka/PR-Review-Bot`, Phase 1 verified):
+
+```
+> pr-review-agent@0.1.0 review
+> tsx src/cli.ts --repo vieronicka/PR-Review-Bot --pr 1 --dry-run
+
+
+--- Phase 1: GitHub fetch ---
+
+Connecting as GitHub user: @vieronicka
+Repository: vieronicka/PR-Review-Bot
+PR number: 1
+
+PR summary
+----------
+  #1  Initialize PR Review Agent with configuration and documentation
+  URL:    https://github.com/vieronicka/PR-Review-Bot/pull/1
+  State:  open
+  Author: @vieronicka
+  Base:   main  ← merge target
+  Head:   feat-vk-CLIvsGithubCommunication  ← your branch
+  Stats:  10 files, +1515 / -0 lines
+  Diff size (chars): 49,235
+
+  Description (first 200 chars):
+  ## Summary
+
+  - Adds Phase 1 of the PR Review Agent: a TypeScript CLI that authenticates with GitHub and fetches pull request metadata, changed files, and diff size without calling an LLM or posting c…
+
+  Changed files:
+    [added       ] .env.example  (+11 -0)
+    [added       ] .gitignore  (+5 -0)
+    [added       ] README.md  (+102 -0)
+    [added       ] docs/phase-1-feature.md  (+299 -0)
+    [added       ] package-lock.json  (+807 -0)
+    [added       ] package.json  (+24 -0)
+    [added       ] src/cli.ts  (+113 -0)
+    [added       ] src/config.ts  (+35 -0)
+    [added       ] src/github.ts  (+105 -0)
+    [added       ] tsconfig.json  (+14 -0)
+Dry-run complete. No AI call and no comment posted on GitHub.
+Next (Phase 2): send the diff to an LLM and print a review.
+```
+
+**What this confirms:**
+
+| Output line | Meaning |
+|-------------|---------|
+| `@vieronicka` | `.env` username loaded; author guard passed |
+| `Base: main` / `Head: feat-vk-...` | Branches match the open PR on GitHub |
+| `10 files, +1515 / -0` | `pulls.get` stats |
+| `Diff size (chars): 49,235` | Diff fetched; size only (full diff not printed in Phase 1) |
+| Changed files list | From `pulls.listFiles` for commits on the PR branch |
+| `Dry-run complete...` | No LLM, no `POST` review |
+
+**Note:** File list reflects **what is on the PR on GitHub**, not every file on your laptop. Push new commits to update the PR, then re-run the command.
+
+**Optional follow-up tests:**
+
+```bash
+# Author guard (fails if PR author ≠ GITHUB_USERNAME)
+npm run review -- --repo vieronicka/PR-Review-Bot --pr 1 --dry-run
+
+# Skip author check (testing only)
+npm run review -- --repo owner/repo --pr N --dry-run --allow-any-author
+```
 
 ---
 

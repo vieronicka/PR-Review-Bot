@@ -2,7 +2,7 @@
 
 A small CLI to learn how GitHub pull requests work and, in later phases, post AI-generated reviews.
 
-## Phase 1 (current): GitHub only — no AI
+## Phase 1: GitHub fetch (dry-run)
 
 **Goal:** Prove your machine can read a PR the same way GitHub shows a diff.
 
@@ -44,9 +44,11 @@ A small CLI to learn how GitHub pull requests work and, in later phases, post AI
    ```
    GITHUB_TOKEN=...
    GITHUB_USERNAME=your-login
+   OPENAI_API_KEY=sk-...          # Phase 2
+   OPENAI_MODEL=gpt-4o-mini        # optional
    ```
 
-### Run Phase 1
+### Run Phase 1 (no OpenAI call)
 
 Use a **real PR you opened** on a repo your token can access:
 
@@ -66,17 +68,91 @@ To test fetching without the author check:
 npm run review -- --repo owner/repo --pr 1 --dry-run --allow-any-author
 ```
 
+## Phase 2 (current): AI review in terminal (Gemini or OpenAI)
+
+**Goal:** Send the PR diff to an LLM and print a structured review (summary, risks, suggestions). Nothing is posted to GitHub yet.
+
+### Setup — Gemini (default)
+
+1. Create an API key at [Google AI Studio](https://aistudio.google.com/apikey)
+2. Add to `.env`:
+   ```
+   LLM_PROVIDER=gemini
+   GEMINI_API_KEY=your_key_here
+   GEMINI_MODEL=gemini-2.5-flash
+   ```
+   **Why Gemini default:** Free tier is suitable for learning; no OpenAI prepaid credits required.
+
+   **If you get 429 `limit: 0`:** `gemini-2.0-flash` often has **no free-tier quota** anymore. Use `gemini-2.5-flash`. Some accounts also need a billing method linked in [AI Studio](https://aistudio.google.com) to activate free limits (you are not charged until you exceed free quota).
+
+### Setup — OpenAI (when you have API credits)
+
+1. Create an API key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+2. Add to `.env`:
+   ```
+   LLM_PROVIDER=openai
+   OPENAI_API_KEY=sk-...
+   OPENAI_MODEL=gpt-4o-mini
+   ```
+   **Why `gpt-4o-mini`:** Lower cost while learning; upgrade to `gpt-4o` if reviews feel shallow.
+
+### Run Phase 2
+
+```bash
+npm run review -- --repo owner/repo --pr 1 --review
+```
+
+Example:
+
+```bash
+npm run review -- --repo vieronicka/PR-Review-Bot --pr 1 --review
+```
+
+Also works: `--no-dry-run` (same as `--review`).
+
+**Why `--review`:** Dry-run is the default so you do not accidentally spend API credits. Omitting flags runs Phase 1 only.
+
+See [docs/phase-2-feature.md](docs/phase-2-feature.md) for methods and flow.
+
 ### Project layout
 
 ```
 pr-review-agent/
   src/
-    cli.ts      ← command-line arguments and printing
-    config.ts   ← .env and repo parsing
-    github.ts   ← all GitHub API calls
+    cli.ts      ← CLI orchestration
+    config.ts   ← GitHub + OpenAI env
+    github.ts   ← GitHub API
+    review.ts   ← truncate diff, Gemini/OpenAI, Zod parse
   .env.example
   package.json
 ```
+
+## Dependencies
+
+Run once after cloning (installs everything in `package.json`, including Phase 2 packages):
+
+```bash
+npm install
+```
+
+You do **not** need to run `npm install zod` separately unless you are adding it yourself.
+
+| Package | Phase | What it does |
+|---------|-------|----------------|
+| `@octokit/rest` | 1 | GitHub REST API client (fetch PR, diff, files) |
+| `commander` | 1 | CLI flags (`--repo`, `--pr`, `--dry-run`) |
+| `dotenv` | 1 | Load secrets from `.env` |
+| **`zod`** | **2** | Validate LLM JSON review before printing (see below) |
+| `tsx` | dev | Run TypeScript without a separate compile step |
+| `typescript` | dev | Type checking (`npm run typecheck`) |
+
+### What is Zod? (Phase 2)
+
+[Zod](https://zod.dev/) checks that the LLM response matches the shape your app expects (`summary`, `risks`, `suggestions`, optional `lineComments`). Gemini and OpenAI return text; the model can omit fields or return invalid JSON. Zod catches that in `src/review.ts` so you get a clear error (and one automatic retry) instead of broken output.
+
+**Why it’s a dependency:** Listed in `package.json` → installed by `npm install` → imported in `review.ts` as `import { z } from "zod"`.
+
+More detail: [docs/phase-2-feature.md](docs/phase-2-feature.md) (Dependencies section).
 
 ## Cursor project skill
 
@@ -89,14 +165,14 @@ This repo includes a **project-scoped** agent skill at `.cursor/skills/update-pr
 | [docs/PLAN.md](docs/PLAN.md) | Full learning plan and progress checklist |
 | [docs/git-update-commands.md](docs/git-update-commands.md) | First commit and push to GitHub (branch setup) |
 | [docs/phase-1-feature.md](docs/phase-1-feature.md) | Phase 1: GitHub fetch — what, why, how (implemented) |
-| [docs/phase-2-feature.md](docs/phase-2-feature.md) | Phase 2: LLM review — planned |
+| [docs/phase-2-feature.md](docs/phase-2-feature.md) | Phase 2: Gemini / OpenAI review — implemented |
 | [docs/phase-3-feature.md](docs/phase-3-feature.md) | Phase 3: Post review to GitHub — planned |
 | [docs/phase-4-feature.md](docs/phase-4-feature.md) | Phase 4: React dashboard — optional |
 | [docs/phase-5-feature.md](docs/phase-5-feature.md) | Phase 5: GitHub Action — optional |
 
 ## Roadmap
 
-- **Phase 2** — Send diff to OpenAI/Azure OpenAI, print JSON review → [phase-2-feature.md](docs/phase-2-feature.md)
-- **Phase 3** — `--post` to create a PR review comment on GitHub → [phase-3-feature.md](docs/phase-3-feature.md)
+- **Phase 2** — Gemini / OpenAI review in terminal → [phase-2-feature.md](docs/phase-2-feature.md) (done)
+- **Phase 3** — `--post` to create a PR review comment on GitHub → [phase-3-feature.md](docs/phase-3-feature.md) (next)
 - **Phase 4** — Optional React UI → [phase-4-feature.md](docs/phase-4-feature.md)
 - **Phase 5** — GitHub Action for whole-team reviews → [phase-5-feature.md](docs/phase-5-feature.md)

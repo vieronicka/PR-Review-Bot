@@ -1,35 +1,39 @@
 #!/usr/bin/env node
 /**
- * Phase 1 entry point — learn the GitHub side before adding AI.
+ * PR review agent CLI
  *
- * Flow:
- *   1. Read .env (token + your username)
- *   2. Call GitHub API for the PR
- *   3. Print a human-readable summary (--dry-run is default behavior for now)
+ * Phase 1: --dry-run (default) — fetch PR from GitHub, print summary
+ * Phase 2: --review (or --no-dry-run) — send diff to Gemini or OpenAI and print AI review
  */
-import { Command } from "commander";
-import { loadConfig, parseRepo } from "./config.js";
+import { Command, Option } from "commander";
+import { loadConfig, loadLlmConfig, parseRepo } from "./config.js";
 import {
   assertAuthorIsUser,
   createOctokit,
   fetchPrSummary,
 } from "./github.js";
+import { generateReview, printReview } from "./review.js";
 
 const program = new Command();
 
 program
   .name("pr-review")
-  .description("PR review agent — Phase 1: fetch and inspect GitHub PRs")
+  .description("PR review agent — fetch GitHub PRs and optionally run AI review")
   .requiredOption("-r, --repo <slug>", "Repository as owner/repo")
   .requiredOption("-p, --pr <number>", "Pull request number", (v) => {
     const n = Number.parseInt(v, 10);
     if (Number.isNaN(n) || n < 1) throw new Error("PR number must be a positive integer");
     return n;
   })
+  .addOption(
+    new Option(
+      "--dry-run",
+      "Fetch from GitHub and print summary only (no LLM call)",
+    ).default(true),
+  )
   .option(
-    "--dry-run",
-    "Fetch from GitHub and print summary only (default for Phase 1)",
-    true,
+    "--review",
+    "Phase 2: run AI review after fetch (same as --no-dry-run)",
   )
   .option(
     "--allow-any-author",
@@ -41,15 +45,28 @@ const opts = program.opts<{
   repo: string;
   pr: number;
   dryRun: boolean;
+  review?: boolean;
   allowAnyAuthor?: boolean;
 }>();
+
+/** Phase 2 when --review or --no-dry-run; otherwise Phase 1 (dry-run default) */
+const runAiReview =
+  opts.review === true || process.argv.includes("--no-dry-run");
+const dryRun = !runAiReview;
+
+function providerLabel(provider: string): string {
+  return provider === "gemini" ? "Gemini" : "OpenAI";
+}
 
 async function main(): Promise<void> {
   const { token, username } = loadConfig();
   const repo = parseRepo(opts.repo);
   const octokit = createOctokit(token);
 
-  console.log("\n--- Phase 1: GitHub fetch ---\n");
+  const phaseLabel = dryRun
+    ? "Phase 1: GitHub fetch"
+    : "Phase 2: GitHub + AI review";
+  console.log(`\n--- ${phaseLabel} ---\n`);
   console.log(`Connecting as GitHub user: @${username}`);
   console.log(`Repository: ${repo.owner}/${repo.repo}`);
   console.log(`PR number: ${opts.pr}\n`);
@@ -60,12 +77,18 @@ async function main(): Promise<void> {
     assertAuthorIsUser(summary, username);
   }
 
-  printSummary(summary, opts.dryRun);
+  printSummary(summary, dryRun);
 
-  if (opts.dryRun) {
-    console.log("Dry-run complete. No AI call and no comment posted on GitHub.");
-    console.log("Next (Phase 2): send the diff to an LLM and print a review.\n");
+  if (dryRun) {
+    console.log("Dry-run complete. No LLM call and no comment posted on GitHub.");
+    console.log("Next: run with --review (or --no-dry-run) to generate an AI review.\n");
+    return;
   }
+
+  const llm = loadLlmConfig();
+  console.log(`Calling ${providerLabel(llm.provider)} (${llm.model})…\n`);
+  const review = await generateReview(summary, llm);
+  printReview(review);
 }
 
 function printSummary(
@@ -101,7 +124,7 @@ function printSummary(
 
   if (dryRun && summary.diffCharCount > 100_000) {
     console.log(
-      "\n  Note: Large diff — Phase 2 will need truncation before sending to an LLM.",
+      "\n  Note: Large diff — truncation will apply before sending to the LLM.",
     );
   }
 }

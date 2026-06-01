@@ -21,6 +21,7 @@ export type PrSummary = {
     changes: number;
   }>;
   diffCharCount: number;
+  diffText: string;
 };
 
 export function createOctokit(token: string): Octokit {
@@ -88,6 +89,7 @@ export async function fetchPrSummary(
       changes: f.changes,
     })),
     diffCharCount: diffText.length,
+    diffText,
   };
 }
 

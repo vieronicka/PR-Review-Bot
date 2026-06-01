@@ -68,9 +68,9 @@ To test fetching without the author check:
 npm run review -- --repo owner/repo --pr 1 --dry-run --allow-any-author
 ```
 
-## Phase 2 (current): AI review in terminal (Gemini or OpenAI)
+## Phase 2: AI review in terminal (Gemini or OpenAI)
 
-**Goal:** Send the PR diff to an LLM and print a structured review (summary, risks, suggestions). Nothing is posted to GitHub yet.
+**Goal:** Send the PR diff to an LLM and print a structured review (summary, risks, suggestions).
 
 ### Setup — Gemini (default)
 
@@ -114,6 +114,34 @@ Also works: `--no-dry-run` (same as `--review`).
 
 See [docs/phase-2-feature.md](docs/phase-2-feature.md) for methods and flow.
 
+## Phase 3 (current): Post review to GitHub
+
+**Goal:** Publish the same AI review as a comment on the pull request (opt-in).
+
+### PAT permission (required for `--post`)
+
+Edit your fine-grained token → **Pull requests: Read and write** (was Read-only for Phase 1–2).
+
+**Why:** Creating a PR review uses `POST .../pulls/{id}/reviews`, which requires write access.
+
+### Run Phase 3
+
+```bash
+npm run review -- --repo owner/repo --pr 1 --review --post
+```
+
+`--post` implies `--review` (you do not need both flags, but both are fine).
+
+| Flag | What |
+|------|------|
+| `--post` | Publish summary + risks + suggestions on the PR |
+| `--force` | Post again even if this commit was already reviewed |
+| (no `--post`) | Terminal only (Phase 2) |
+
+**Deduplication:** `.cache/reviewed-shas.json` stores the last reviewed commit per PR so repeated runs do not spam the PR. Use `--force` to override.
+
+See [docs/phase-3-feature.md](docs/phase-3-feature.md).
+
 ### Project layout
 
 ```
@@ -122,8 +150,10 @@ pr-review-agent/
     cli.ts      ← CLI orchestration
     config.ts   ← GitHub + OpenAI env
     github.ts   ← GitHub API
-    review.ts   ← truncate diff, Gemini/OpenAI, Zod parse
+    review.ts        ← truncate diff, Gemini/OpenAI, Zod parse
+    review-cache.ts  ← dedupe by commit SHA before --post
   .env.example
+  .cache/            ← reviewed SHAs (gitignored)
   package.json
 ```
 
@@ -166,13 +196,13 @@ This repo includes a **project-scoped** agent skill at `.cursor/skills/update-pr
 | [docs/git-update-commands.md](docs/git-update-commands.md) | First commit and push to GitHub (branch setup) |
 | [docs/phase-1-feature.md](docs/phase-1-feature.md) | Phase 1: GitHub fetch — what, why, how (implemented) |
 | [docs/phase-2-feature.md](docs/phase-2-feature.md) | Phase 2: Gemini / OpenAI review — implemented |
-| [docs/phase-3-feature.md](docs/phase-3-feature.md) | Phase 3: Post review to GitHub — planned |
+| [docs/phase-3-feature.md](docs/phase-3-feature.md) | Phase 3: Post review to GitHub — implemented |
 | [docs/phase-4-feature.md](docs/phase-4-feature.md) | Phase 4: React dashboard — optional |
 | [docs/phase-5-feature.md](docs/phase-5-feature.md) | Phase 5: GitHub Action — optional |
 
 ## Roadmap
 
 - **Phase 2** — Gemini / OpenAI review in terminal → [phase-2-feature.md](docs/phase-2-feature.md) (done)
-- **Phase 3** — `--post` to create a PR review comment on GitHub → [phase-3-feature.md](docs/phase-3-feature.md) (next)
+- **Phase 3** — `--post` to GitHub → [phase-3-feature.md](docs/phase-3-feature.md) (done)
 - **Phase 4** — Optional React UI → [phase-4-feature.md](docs/phase-4-feature.md)
 - **Phase 5** — GitHub Action for whole-team reviews → [phase-5-feature.md](docs/phase-5-feature.md)

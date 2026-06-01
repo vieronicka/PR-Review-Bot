@@ -15,11 +15,13 @@ export function loadConfig(): {
   username: string;
 } {
   const token = process.env.GITHUB_TOKEN?.trim();
-  const username = process.env.GITHUB_USERNAME?.trim();
+  const username =
+    process.env.GITHUB_USERNAME?.trim() ||
+    (process.env.GITHUB_ACTIONS === "true" ? "github-actions[bot]" : "");
 
   if (!token) {
     throw new Error(
-      "Missing GITHUB_TOKEN. Copy .env.example to .env and add your token.",
+      "Missing GITHUB_TOKEN. Copy .env.example to .env and add your token (or use GITHUB_TOKEN in Actions).",
     );
   }
   if (!username) {

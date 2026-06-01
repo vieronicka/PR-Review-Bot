@@ -1,0 +1,71 @@
+# Phase 5 — Auto-review pull requests with Gemini/OpenAI and post summary to the PR.
+# Requires repository secrets: GEMINI_API_KEY (or OPENAI_API_KEY + LLM_PROVIDER=openai)
+
+name: PR Review Agent
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: true
+        type: number
+
+jobs:
+  review:
+    # Skip drafts and Dependabot PRs; always allow manual workflow_dispatch
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.draft == false &&
+       github.actor != 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore review dedup cache
+        if: github.event_name == 'pull_request'
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: pr-review-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+
+      - name: Resolve PR number
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "number=${{ inputs.pr_number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run AI review and post to PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_USERNAME: github-actions[bot]
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'gemini' }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o-mini' }}
+        run: |
+          npm run review -- \
+            --repo "${{ github.repository }}" \
+            --pr "${{ steps.pr.outputs.number }}" \
+            --post \
+            --allow-any-author

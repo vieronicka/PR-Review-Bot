@@ -22,6 +22,8 @@ export type PrSummary = {
   }>;
   diffCharCount: number;
   diffText: string;
+  /** Latest commit on the PR head branch (required for posting reviews) */
+  headCommitSha: string;
 };
 
 export function createOctokit(token: string): Octokit {
@@ -90,7 +92,28 @@ export async function fetchPrSummary(
     })),
     diffCharCount: diffText.length,
     diffText,
+    headCommitSha: pr.head.sha,
   };
+}
+
+/** Create a PR review comment (summary only; event COMMENT = neutral feedback) */
+export async function postPrReview(
+  octokit: Octokit,
+  repo: RepoRef,
+  prNumber: number,
+  headCommitSha: string,
+  body: string,
+): Promise<string> {
+  const { data } = await octokit.pulls.createReview({
+    owner: repo.owner,
+    repo: repo.repo,
+    pull_number: prNumber,
+    commit_id: headCommitSha,
+    body,
+    event: "COMMENT",
+  });
+
+  return data.html_url ?? `https://github.com/${repo.owner}/${repo.repo}/pull/${prNumber}#pullrequestreview-${data.id}`;
 }
 
 export function assertAuthorIsUser(

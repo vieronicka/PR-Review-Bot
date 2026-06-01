@@ -142,6 +142,33 @@ npm run review -- --repo owner/repo --pr 1 --review --post
 
 See [docs/phase-3-feature.md](docs/phase-3-feature.md).
 
+## Phase 5: GitHub Action (team automation)
+
+**Goal:** Every PR open/update in the repo gets an AI review posted by `github-actions[bot]` — no local CLI required.
+
+### Prerequisites
+
+- Phases 1–3 working locally (you already proved fetch + LLM + post).
+- Merge `.github/workflows/pr-review.yml` to your default branch (`main`).
+- Add repository secret **`GEMINI_API_KEY`** (or `OPENAI_API_KEY` + variable `LLM_PROVIDER=openai`).
+
+Full setup: [docs/phase-5-setup.md](docs/phase-5-setup.md).
+
+### What the workflow does
+
+Same command as local `--post`, with `--allow-any-author` so any contributor’s PR is reviewed:
+
+```bash
+npm run review -- --repo owner/repo --pr N --post --allow-any-author
+```
+
+| Trigger | When |
+|---------|------|
+| PR opened / new commits | Automatic |
+| Actions → **PR Review Agent** → Run workflow | Manual (enter PR number) |
+
+Skipped: draft PRs, Dependabot PRs.
+
 ### Project layout
 
 ```
@@ -154,6 +181,7 @@ pr-review-agent/
     review-cache.ts  ← dedupe by commit SHA before --post
   .env.example
   .cache/            ← reviewed SHAs (gitignored)
+  .github/workflows/pr-review.yml  ← Phase 5 CI
   package.json
 ```
 
@@ -198,11 +226,12 @@ This repo includes a **project-scoped** agent skill at `.cursor/skills/update-pr
 | [docs/phase-2-feature.md](docs/phase-2-feature.md) | Phase 2: Gemini / OpenAI review — implemented |
 | [docs/phase-3-feature.md](docs/phase-3-feature.md) | Phase 3: Post review to GitHub — implemented |
 | [docs/phase-4-feature.md](docs/phase-4-feature.md) | Phase 4: React dashboard — optional |
-| [docs/phase-5-feature.md](docs/phase-5-feature.md) | Phase 5: GitHub Action — optional |
+| [docs/phase-5-feature.md](docs/phase-5-feature.md) | Phase 5: GitHub Action — implemented |
+| [docs/phase-5-setup.md](docs/phase-5-setup.md) | Phase 5: secrets and first run |
 
 ## Roadmap
 
 - **Phase 2** — Gemini / OpenAI review in terminal → [phase-2-feature.md](docs/phase-2-feature.md) (done)
 - **Phase 3** — `--post` to GitHub → [phase-3-feature.md](docs/phase-3-feature.md) (done)
 - **Phase 4** — Optional React UI → [phase-4-feature.md](docs/phase-4-feature.md)
-- **Phase 5** — GitHub Action for whole-team reviews → [phase-5-feature.md](docs/phase-5-feature.md)
+- **Phase 5** — GitHub Action for whole-team reviews → [phase-5-feature.md](docs/phase-5-feature.md) (done)
